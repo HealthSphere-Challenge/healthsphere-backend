@@ -6,7 +6,7 @@ Browser → frontend → backend → PostgreSQL. Backend → AI and backend → 
 
 ## Target stack and planned structure
 
-Python, FastAPI, Pydantic, SQLAlchemy 2, psycopg 3, PostgreSQL, Alembic, pytest and httpx. Versions, dependency/lock tool, synchronous versus asynchronous database execution and deployment topology are unresolved for HS-004.
+Python 3.13, FastAPI, Pydantic, synchronous SQLAlchemy 2, psycopg 3, PostgreSQL, Alembic, pytest and httpx. `uv` is the planned Python project/dependency manager. Exact package versions are selected and tested by HS-004; HS-002 installs no dependencies. Deployment topology remains pending HS-016.
 
 Planned modules: `app/api/` routes and dependencies; `app/schemas/` request/response schemas; `app/services/` use cases; `app/repositories/` persistence; `app/models/` SQLAlchemy mappings; `app/integrations/` AI/Agent clients; `app/core/` configuration/security; `app/db/` connection/session lifecycle. Do not create empty architectural layers for their own sake.
 
@@ -14,12 +14,12 @@ Dependency direction: route → service → repository → database. Routes tran
 
 ## Data and product ownership
 
-One user account = one health profile. Backend owns user identity, profile, measurements, assessment history and authorized conversation context. Do not implement delegated/guardian/family permissions. Persist measurements with units and observation time; distinguish unknown from absent and zero. Persist assessment provenance and the input context needed to interpret a historical result, subject to minimization. Exact tables and retention rules remain unresolved until their tickets; Stage 2 creates no models or tables.
+One user account = one health profile. Backend owns user identity, profile, measurements, assessment history and authorized conversation context. Do not implement delegated/guardian/family permissions. Persist measurements with units and observation time; distinguish unknown from absent and zero. Persist assessment provenance and the input context needed to interpret a historical result, subject to minimization. Conversation retention is 30 days for the prototype; exact tables, deletion operations, and backup behavior remain pending their implementation tickets. HS-002 creates no models or tables.
 
 ## Integration behavior
 
 Authenticate and authorize before querying or sending user context. Build minimum AI features from validated profile/measurement data. Validate downstream responses before persistence/return. Retain model identity/version, target/horizon and pipeline provenance. An unavailable or ineligible assessment is not a low score. Agent messages receive only necessary context and approved assessment evidence; Agent cannot alter a predictive result.
 
-Set bounded request timeouts; avoid retries of non-idempotent operations without an idempotency design. Do not hold a database transaction open across slow remote inference. Exact retry budgets, idempotency keys, sync/async response mode and conversation retention are HS-002 decisions. Map failures into stable safe API errors, logging correlation metadata rather than medical payloads.
+Use 2-second connect/10-second total AI timeouts and 2-second connect/30-second total Agent timeouts. Do not retry downstream application requests automatically in Phase 1. Do not hold a database transaction open across remote inference. Conversation retention is 30 days for the prototype and user deletion is required; deletion operations and backup behavior belong to HS-013/016. Map failures into the canonical safe API error while logging request IDs rather than medical payloads.
 
 See [contracts](../api/CONTRACTS.md), [database](../database/DATABASE_STRATEGY.md), [security](../security/SECURITY_AND_PRIVACY.md), and [testing](../testing/TESTING_STRATEGY.md).
