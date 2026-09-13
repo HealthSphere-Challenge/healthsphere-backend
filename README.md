@@ -1,6 +1,6 @@
 # HealthSphere — FastAPI application orchestrator
 
-## Current status — Stage 3
+## Foundation status
 
 Foundation/governance only, delivered for review on 2026-09-13. No FastAPI runtime, application endpoints, models, tables, migrations, dependency manifest, tests or CI exists yet. Documentation, repo-local skills and support templates describe future approved work; there are no application install/run commands to execute yet.
 

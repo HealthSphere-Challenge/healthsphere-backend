@@ -7,9 +7,9 @@ Read [architecture](docs/architecture/BACKEND_ARCHITECTURE.md), [ADLC](docs/engi
 
 Exactly four repositories remain independent. Browser → frontend → backend → PostgreSQL; backend → AI and backend → Agent. Frontend never calls AI or Agent directly. Backend owns application persistence and access control. One user account = one health profile. MVP UI is English; persona references do not authorize guardian or multi-profile access.
 
-## Current authorization
+## Authorization boundary
 
-Stage 3 permits delivery of the approved governance foundation: create the approved issues, commit and push this foundation branch, and open a PR to main. No product features, application tables, training, indexing, deployment, or PR merge is authorized. Keep existing Phase 0 assets and raw datasets intact. No fifth repository.
+This repository documents constraints; it does not grant permission to implement, publish, deploy or merge. Follow the user's current authorization and the active approved ticket/plan. Keep existing Phase 0 assets and raw datasets intact. No fifth repository.
 
 ## Architecture and scope control
 
