@@ -1,6 +1,6 @@
 # Backend testing strategy
 
-Status: planned for HS-004; no executable application, tests or CI yet.
+Status: HS-004 implements the Python 3.13/uv runner, foundation unit tests, isolated PostgreSQL connectivity test, Alembic validation, and pull-request CI. Product tests arrive with their feature tickets.
 
 - Unit: pytest for services, validation, ownership decisions and downstream response/error mapping. Mock repositories/clients at explicit boundaries; avoid HTTP-only unit tests that miss domain rules.
 - Integration: FastAPI/httpx against isolated PostgreSQL using `TEST_DATABASE_URL`; register/login, progressive profile, measurement and assessment persistence, authorized conversation access, cross-user denials and rollback behavior as features arrive.
