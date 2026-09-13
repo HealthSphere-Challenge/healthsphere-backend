@@ -6,6 +6,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
+class DomainError(Exception):
+    def __init__(self, status_code: int, code: str, message: str) -> None:
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
 def error_response(
     *,
     request: Request,
@@ -31,6 +39,12 @@ def error_response(
 
 
 def install_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(DomainError)
+    async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
+        return error_response(
+            request=request, status_code=exc.status_code, code=exc.code, message=exc.message
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         details = [
