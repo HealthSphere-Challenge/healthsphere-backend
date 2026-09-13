@@ -1,0 +1,38 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: healthsphere_test
+          POSTGRES_PASSWORD: test_only_password
+          POSTGRES_DB: healthsphere_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U healthsphere_test -d healthsphere_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      HEALTHSPHERE_APP_ENVIRONMENT: test
+      HEALTHSPHERE_DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://healthsphere_app:test_only_password@localhost:5432/healthsphere_dev
+      TEST_DATABASE_URL: postgresql+psycopg://healthsphere_test:test_only_password@localhost:5432/healthsphere_test
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.1.0
+        with: { version: "0.9.26", enable-cache: true }
+      - run: uv sync --locked --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest tests/unit
+      - run: uv run pytest tests/integration
+      - run: DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
+      - run: DATABASE_URL="$TEST_DATABASE_URL" uv run alembic check

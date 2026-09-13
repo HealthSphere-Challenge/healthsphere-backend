@@ -1,12 +1,12 @@
 # Backend architecture
 
-Status: approved direction, no application implementation. This repository owns application orchestration, not cross-project governance. Each repository maintains its own instructions and detailed architecture; GitHub Issues/Project coordinates delivery.
+Status: HS-004 implements the executable application, configuration, error/request middleware, database session, and Alembic foundations. No product routes, services, repositories, models, or tables are implemented. This repository owns application orchestration, not cross-project governance.
 
 Browser → frontend → backend → PostgreSQL. Backend → AI and backend → Agent. The backend is the trusted application entry point; specialized services have no direct browser interface or application database ownership.
 
 ## Target stack and planned structure
 
-Python 3.13, FastAPI, Pydantic, synchronous SQLAlchemy 2, psycopg 3, PostgreSQL, Alembic, pytest and httpx. `uv` is the planned Python project/dependency manager. Exact package versions are selected and tested by HS-004; HS-002 installs no dependencies. Deployment topology remains pending HS-016.
+Python 3.13, FastAPI, Pydantic, synchronous SQLAlchemy 2, psycopg 3, PostgreSQL, Alembic, pytest and httpx. `uv` manages the locked environment. Exact versions are pinned in `pyproject.toml` and `uv.lock`. Deployment topology remains pending HS-016.
 
 Planned modules: `app/api/` routes and dependencies; `app/schemas/` request/response schemas; `app/services/` use cases; `app/repositories/` persistence; `app/models/` SQLAlchemy mappings; `app/integrations/` AI/Agent clients; `app/core/` configuration/security; `app/db/` connection/session lifecycle. Do not create empty architectural layers for their own sake.
 
