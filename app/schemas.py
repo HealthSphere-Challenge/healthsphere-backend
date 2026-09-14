@@ -6,12 +6,14 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     password: str = Field(min_length=12, max_length=128)
     display_name: str = Field(min_length=1, max_length=100)
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=320, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
     password: str = Field(min_length=1, max_length=128)
 
@@ -25,6 +27,7 @@ class UserResponse(BaseModel):
 
 
 class ProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     date_of_birth: date | None = None
     sex_at_birth: Literal["female", "male", "intersex", "prefer_not_to_say"] | None = None
     height_cm: float | None = Field(default=None, ge=50, le=260)

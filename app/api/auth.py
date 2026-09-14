@@ -111,7 +111,7 @@ def login(body: LoginRequest, response: Response, db: Db, settings: AppSettings)
     )
 
 
-@router.get("/me", response_model=AccountResponse)
+@router.get("/auth/me", response_model=AccountResponse)
 def me(authenticated: CurrentSession, db: Db) -> AccountResponse:
     return account_response(authenticated, db, authenticated.csrf_token or "")
 

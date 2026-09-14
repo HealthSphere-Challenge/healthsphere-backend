@@ -3,6 +3,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -43,6 +44,7 @@ class User(Base):
     profile: Mapped["HealthProfile"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    __table_args__ = (CheckConstraint("email = lower(email)", name="ck_users_email_normalized"),)
 
 
 class SessionRecord(Base):

@@ -39,6 +39,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.CheckConstraint("email = lower(email)", name="ck_users_email_normalized"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
     )
