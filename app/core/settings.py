@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     ai_timeout_seconds: float = Field(default=10.0, gt=0, le=30)
     ai_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
     agent_service_url: str | None = None
+    agent_internal_token: str | None = None
+    agent_timeout_seconds: float = Field(default=30.0, gt=0, le=60)
+    agent_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
     cors_origins: tuple[str, ...] = ()
     session_cookie_name: str = "healthsphere_session"
     session_absolute_seconds: int = 604800
@@ -60,15 +63,15 @@ class Settings(BaseSettings):
             raise ValueError("LOG_LEVEL is invalid")
         return normalized
 
-    @field_validator("ai_service_url", mode="before")
+    @field_validator("ai_service_url", "agent_service_url", mode="before")
     @classmethod
     def validate_ai_url(cls, value: object) -> str | None:
         if value == "" or value is None:
             return None
         if not isinstance(value, str):
-            raise ValueError("AI_SERVICE_URL must be a string")
+            raise ValueError("Service URL must be a string")
         if value is not None and not value.startswith(("http://", "https://")):
-            raise ValueError("AI_SERVICE_URL must use http or https")
+            raise ValueError("Service URL must use http or https")
         return value.rstrip("/")
 
     @model_validator(mode="after")
@@ -77,6 +80,10 @@ class Settings(BaseSettings):
             not self.ai_service_url or not self.ai_internal_token
         ):
             raise ValueError("Production requires AI_SERVICE_URL and AI_INTERNAL_TOKEN")
+        if self.app_environment == "production" and (
+            not self.agent_service_url or not self.agent_internal_token
+        ):
+            raise ValueError("Production requires AGENT_SERVICE_URL and AGENT_INTERNAL_TOKEN")
         return self
 
 

@@ -33,5 +33,7 @@ def test_production_requires_ai_service_configuration() -> None:
         app_environment="production",
         ai_service_url="http://ai:8001/",
         ai_internal_token="configured-outside-git",
+        agent_service_url="http://agent:8010/",
+        agent_internal_token="configured-outside-git",
     )
     assert settings.ai_service_url == "http://ai:8001"

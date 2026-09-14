@@ -198,3 +198,41 @@ class AssessmentResponse(BaseModel):
 class AssessmentListResponse(BaseModel):
     items: list[AssessmentResponse]
     next_cursor: str | None
+
+
+class ConversationMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+    assessment_id: UUID | None = None
+
+    @field_validator("content")
+    @classmethod
+    def meaningful_content(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Message content cannot be blank")
+        return value
+
+
+class ConversationMessageResponse(BaseModel):
+    id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    response_type: Literal["answer", "follow_up", "abstention", "urgent"] | None = None
+    sources: list[dict[str, object]] = []
+    safety: dict[str, object] | None = None
+    uncertainty: str | None = None
+    provenance: dict[str, object] | None = None
+    created_at: datetime
+
+
+class ConversationResponse(BaseModel):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    messages: list[ConversationMessageResponse]
+
+
+class ConversationListResponse(BaseModel):
+    items: list[ConversationResponse]
+    next_cursor: str | None
