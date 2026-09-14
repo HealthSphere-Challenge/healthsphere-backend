@@ -133,7 +133,7 @@ See the complete dictionary and validation rules in [health metrics](HEALTH_METR
 }
 ```
 
-The request omits server-generated `id` and `recorded_at`. `note` is optional and may be null; its length limit is **PENDING HS-008**. `source` is `manual` for Phase 1 input. BMI is returned only as a derived projection and is rejected as measurement input.
+The request omits server-generated `id` and `recorded_at`. `note` is optional, may be null, and is limited to 1,000 characters. `source` is `manual` for Phase 1 input. BMI is returned only as a derived projection, rounded to two decimal places, and is rejected as measurement input.
 
 ## Dashboard — APPROVED CONTRACT
 

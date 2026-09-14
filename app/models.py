@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
 
@@ -10,6 +11,8 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -27,6 +30,22 @@ class SexAtBirth(StrEnum):
     male = "male"
     intersex = "intersex"
     prefer_not_to_say = "prefer_not_to_say"
+
+
+class MetricType(StrEnum):
+    heart_rate = "heart_rate"
+    blood_pressure = "blood_pressure"
+    weight = "weight"
+    blood_glucose = "blood_glucose"
+    sleep_duration = "sleep_duration"
+    physical_activity_duration = "physical_activity_duration"
+
+
+class GlucoseContext(StrEnum):
+    fasting = "fasting"
+    postprandial = "postprandial"
+    random = "random"
+    unknown = "unknown"
 
 
 class User(Base):
@@ -85,3 +104,48 @@ class HealthProfile(Base):
     )
     user: Mapped[User] = relationship(back_populates="profile")
     __table_args__ = (UniqueConstraint("user_id", name="uq_health_profiles_user_id"),)
+
+
+class Measurement(Base):
+    __tablename__ = "measurements"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    metric: Mapped[MetricType] = mapped_column(Enum(MetricType, name="metric_type"))
+    numeric_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    systolic: Mapped[int | None] = mapped_column(Integer)
+    diastolic: Mapped[int | None] = mapped_column(Integer)
+    glucose_context: Mapped[GlucoseContext | None] = mapped_column(
+        Enum(GlucoseContext, name="glucose_context")
+    )
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    note: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        CheckConstraint(
+            "numeric_value IS NULL OR numeric_value > 0", name="ck_measurements_positive_numeric"
+        ),
+        CheckConstraint(
+            "systolic IS NULL OR systolic > 0", name="ck_measurements_positive_systolic"
+        ),
+        CheckConstraint(
+            "diastolic IS NULL OR diastolic > 0", name="ck_measurements_positive_diastolic"
+        ),
+        CheckConstraint(
+            "(metric = 'blood_pressure' AND numeric_value IS NULL "
+            "AND systolic IS NOT NULL AND diastolic IS NOT NULL) OR "
+            "(metric <> 'blood_pressure' AND numeric_value IS NOT NULL "
+            "AND systolic IS NULL AND diastolic IS NULL)",
+            name="ck_measurements_value_shape",
+        ),
+        CheckConstraint(
+            "(metric = 'blood_glucose' AND glucose_context IS NOT NULL) OR "
+            "(metric <> 'blood_glucose' AND glucose_context IS NULL)",
+            name="ck_measurements_context_shape",
+        ),
+        Index("ix_measurements_user_measured", "user_id", "measured_at", "id"),
+    )

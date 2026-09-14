@@ -1,6 +1,6 @@
 # Frontend-facing API contract
 
-Status: **APPROVED CONTRACT for HS-002; documentation only.** This is the browser-facing subset of [the authoritative Phase 1 contract](CONTRACTS.md). Authentication behavior is **PENDING HS-006**, measurement behavior **PENDING HS-008**, assessment semantics **PENDING HS-010**, and conversation behavior **PENDING HS-013**.
+Status: **APPROVED CONTRACT for HS-002; HS-006 authentication and HS-008 measurements implemented.** This is the browser-facing subset of [the authoritative Phase 1 contract](CONTRACTS.md). Assessment semantics are **PENDING HS-012-BE**, and conversation behavior is **PENDING HS-013**.
 
 ## Boundary
 
@@ -17,6 +17,7 @@ The frontend calls only the backend under `/api/v1`. It never calls AI, Agent, P
 | `PATCH` | `/api/v1/profile` | partial profile fields + CSRF | `200` user/profile resource |
 | `POST` | `/api/v1/measurements` | typed measurement + CSRF | `201` measurement resource |
 | `GET` | `/api/v1/measurements?cursor=` | optional opaque cursor | `200` paginated measurements |
+| `GET` | `/api/v1/measurements/{measurement_id}` | session cookie | `200` owned measurement resource |
 | `GET` | `/api/v1/dashboard` | session cookie | `200` dashboard resource |
 | `POST` | `/api/v1/assessments` | CSRF header | `202` or `200` assessment resource; exact completion choice **PENDING HS-012-BE** |
 | `GET` | `/api/v1/assessments/{assessment_id}` | session cookie | `200` assessment resource |
