@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.assessments import router as assessments_router
 from app.api.auth import router as auth_router
+from app.api.conversations import router as conversations_router
 from app.api.health import router as health_router
 from app.api.measurements import router as measurements_router
 from app.core.errors import install_exception_handlers
@@ -35,4 +36,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(measurements_router)
     app.include_router(assessments_router)
+    app.include_router(conversations_router)
     return app

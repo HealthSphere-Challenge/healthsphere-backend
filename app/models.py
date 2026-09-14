@@ -49,6 +49,11 @@ class GlucoseContext(StrEnum):
     unknown = "unknown"
 
 
+class ConversationRole(StrEnum):
+    user = "user"
+    assistant = "assistant"
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -176,4 +181,47 @@ class RiskAssessment(Base):
         CheckConstraint("score >= 0 AND score <= 1", name="ck_risk_assessments_score_range"),
         UniqueConstraint("user_id", "request_id", name="uq_risk_assessments_user_request"),
         Index("ix_risk_assessments_user_created", "user_id", "created_at", "id"),
+    )
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationMessage.created_at",
+    )
+    __table_args__ = (
+        Index("ix_conversations_user_updated", "user_id", "updated_at", "id"),
+        Index("ix_conversations_expires_at", "expires_at"),
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    conversation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[ConversationRole] = mapped_column(Enum(ConversationRole, name="conversation_role"))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    response_type: Mapped[str | None] = mapped_column(String(32))
+    sources: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB)
+    safety: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    uncertainty: Mapped[str | None] = mapped_column(Text)
+    agent_request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    provenance: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    __table_args__ = (
+        Index(
+            "ix_conversation_messages_conversation_created", "conversation_id", "created_at", "id"
+        ),
     )

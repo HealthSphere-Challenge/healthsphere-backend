@@ -70,3 +70,17 @@ For a manual smoke test, start PostgreSQL and apply `alembic upgrade head`; star
 service on port 8001 with the same internal token; start this backend; register/login; add a
 date of birth, height, paired BP, optional heart rate and weight; then POST an assessment and
 retrieve it from the assessment history. No automatic AI retry is performed.
+
+## HS-014 assistant orchestration
+
+The authenticated conversation API is exposed only by this backend at
+`/api/v1/conversations`. Configure its private agent connection with
+`HEALTHSPHERE_AGENT_SERVICE_URL` and `HEALTHSPHERE_AGENT_INTERNAL_TOKEN`; the token is never
+sent to the browser. The backend sends at most six recent turns, no profile or measurement
+history, and includes an assessment only when the browser supplies its ID and the record
+belongs to the current user.
+
+Conversations expire after 30 days and can be deleted through the API. A message exchange
+is stored only after the agent returns a valid, correlated response, so an unavailable or
+incompatible agent leaves no unmatched user message. The backend performs no automatic
+retry and preserves the response state, sources, safety, uncertainty, and provenance.
