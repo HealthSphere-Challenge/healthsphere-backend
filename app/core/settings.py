@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     ai_service_url: str | None = None
     agent_service_url: str | None = None
     cors_origins: tuple[str, ...] = ()
+    session_cookie_name: str = "healthsphere_session"
+    session_absolute_seconds: int = 604800
+    session_idle_seconds: int = 86400
+    session_cookie_secure: bool | None = None
 
     @field_validator("database_url")
     @classmethod

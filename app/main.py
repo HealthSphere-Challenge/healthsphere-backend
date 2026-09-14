@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.core.errors import install_exception_handlers
 from app.core.logging import configure_logging
@@ -28,5 +29,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Request-ID"],
         )
     install_exception_handlers(app)
+    app.include_router(auth_router)
     app.include_router(health_router)
     return app

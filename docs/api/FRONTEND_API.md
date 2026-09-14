@@ -13,7 +13,7 @@ The frontend calls only the backend under `/api/v1`. It never calls AI, Agent, P
 | `POST` | `/api/v1/auth/register` | credentials + CSRF as applicable | `201` user/profile resource |
 | `POST` | `/api/v1/auth/login` | credentials + CSRF as applicable | `200` user/profile resource + session cookie |
 | `POST` | `/api/v1/auth/logout` | CSRF header | `204` |
-| `GET` | `/api/v1/me` | session cookie | `200` user/profile resource |
+| `GET` | `/api/v1/auth/me` | session cookie | `200` user/profile resource |
 | `PATCH` | `/api/v1/profile` | partial profile fields + CSRF | `200` user/profile resource |
 | `POST` | `/api/v1/measurements` | typed measurement + CSRF | `201` measurement resource |
 | `GET` | `/api/v1/measurements?cursor=` | optional opaque cursor | `200` paginated measurements |
