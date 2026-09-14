@@ -207,6 +207,100 @@ def test_logs_and_safe_errors_exclude_sensitive_values(client: TestClient, caplo
     assert "traceback" not in str(error).lower() and "sql" not in str(error).lower()
 
 
+def measurement_payload(metric: str, value, unit: str, context=None) -> dict:
+    return {
+        "metric": metric,
+        "value": value,
+        "unit": unit,
+        "context": context,
+        "measured_at": "2026-09-12T09:30:00+02:00",
+        "source": "manual",
+        "note": None,
+    }
+
+
+@pytest.mark.integration
+def test_measurement_auth_validation_creation_and_retrieval(client: TestClient) -> None:
+    payload = measurement_payload("heart_rate", 68, "bpm")
+    assert client.post("/api/v1/measurements", json=payload).status_code == 401
+    _, csrf = register(client)
+    assert client.post("/api/v1/measurements", json=payload).status_code == 403
+    created = client.post("/api/v1/measurements", headers={"X-CSRF-Token": csrf}, json=payload)
+    assert created.status_code == 201
+    body = created.json()
+    assert body["metric"] == "heart_rate" and body["unit"] == "bpm"
+    assert body["measured_at"].startswith("2026-09-12T07:30:00")
+    assert body["recorded_at"] != body["measured_at"]
+    assert client.get(f"/api/v1/measurements/{body['id']}").json() == body
+    listed = client.get("/api/v1/measurements").json()
+    assert listed == {"items": [body], "next_cursor": None}
+
+
+@pytest.mark.integration
+def test_measurement_shapes_context_and_bmi_input_are_rejected(client: TestClient) -> None:
+    _, csrf = register(client)
+    invalid = [
+        measurement_payload("blood_pressure", {"systolic": 118}, "mmHg"),
+        measurement_payload("blood_glucose", 92.5, "mg/dL"),
+        measurement_payload("heart_rate", 68, "kg"),
+        measurement_payload("heart_rate", 0, "bpm"),
+        measurement_payload("bmi", 24.2, "kg/m2"),
+        {**measurement_payload("weight", 72.5, "kg"), "measured_at": "2026-09-12T09:30:00"},
+    ]
+    for payload in invalid:
+        response = client.post("/api/v1/measurements", headers={"X-CSRF-Token": csrf}, json=payload)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.integration
+def test_dashboard_empty_latest_bmi_and_all_canonical_metrics(client: TestClient) -> None:
+    _, csrf = register(client)
+    empty = client.get("/api/v1/dashboard").json()
+    assert all(value is None for value in empty["latest_measurements"].values())
+    client.patch(
+        "/api/v1/profile",
+        headers={"X-CSRF-Token": csrf},
+        json={"date_of_birth": "1990-01-01", "height_cm": 180},
+    )
+    payloads = [
+        measurement_payload("heart_rate", 68, "bpm"),
+        measurement_payload("blood_pressure", {"systolic": 118, "diastolic": 76}, "mmHg"),
+        measurement_payload("weight", 81, "kg"),
+        measurement_payload("blood_glucose", 92.5, "mg/dL", "fasting"),
+        measurement_payload("sleep_duration", 450, "min"),
+        measurement_payload("physical_activity_duration", 30, "min"),
+    ]
+    for payload in payloads:
+        assert (
+            client.post(
+                "/api/v1/measurements", headers={"X-CSRF-Token": csrf}, json=payload
+            ).status_code
+            == 201
+        )
+    dashboard = client.get("/api/v1/dashboard").json()["latest_measurements"]
+    assert dashboard["blood_pressure"]["value"] == {"systolic": 118, "diastolic": 76}
+    assert dashboard["bmi"]["value"] == 25.0
+    assert dashboard["bmi"]["derived_from_measurement_id"] == dashboard["weight"]["id"]
+
+
+@pytest.mark.integration
+def test_measurement_ownership_and_sensitive_logging(client: TestClient, caplog) -> None:
+    _, csrf = register(client, "owner@example.test")
+    payload = {**measurement_payload("weight", 72.5, "kg"), "note": "private-note"}
+    identifier = client.post(
+        "/api/v1/measurements", headers={"X-CSRF-Token": csrf}, json=payload
+    ).json()["id"]
+    register(client, "other@example.test")
+    denied = client.get(f"/api/v1/measurements/{identifier}")
+    assert (denied.status_code, denied.json()["error"]["code"]) == (
+        404,
+        "resource_not_found",
+    )
+    assert client.get("/api/v1/measurements").json()["items"] == []
+    assert "private-note" not in " ".join(record.getMessage() for record in caplog.records)
+
+
 @pytest.mark.integration
 def test_session_expiration_idle_logout_ownership_and_cors(client: TestClient) -> None:
     _, csrf = register(client, "first@example.test")

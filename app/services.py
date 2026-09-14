@@ -1,8 +1,12 @@
+import base64
 import hashlib
 import hmac
+import json
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
@@ -11,9 +15,17 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
 from app.core.settings import Settings
-from app.models import HealthProfile, SessionRecord, User
-from app.repositories import AuthRepository, ProfileRepository
-from app.schemas import ProfilePatch, RegisterRequest
+from app.models import GlucoseContext, HealthProfile, Measurement, MetricType, SessionRecord, User
+from app.repositories import AuthRepository, MeasurementRepository, ProfileRepository
+from app.schemas import (
+    BloodPressureValue,
+    BmiProjection,
+    MeasurementCreate,
+    MeasurementListResponse,
+    MeasurementResponse,
+    ProfilePatch,
+    RegisterRequest,
+)
 
 _passwords = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 
@@ -142,3 +154,128 @@ class ProfileService:
         for field, value in updates.items():
             setattr(profile, field, value)
         return profile
+
+
+UNITS = {
+    MetricType.heart_rate: "bpm",
+    MetricType.blood_pressure: "mmHg",
+    MetricType.weight: "kg",
+    MetricType.blood_glucose: "mg/dL",
+    MetricType.sleep_duration: "min",
+    MetricType.physical_activity_duration: "min",
+}
+
+
+def measurement_response(measurement: Measurement) -> MeasurementResponse:
+    if measurement.metric == MetricType.blood_pressure:
+        value: float | int | BloodPressureValue = BloodPressureValue(
+            systolic=measurement.systolic, diastolic=measurement.diastolic
+        )
+    elif measurement.metric in {
+        MetricType.heart_rate,
+        MetricType.sleep_duration,
+        MetricType.physical_activity_duration,
+    }:
+        value = int(measurement.numeric_value)
+    else:
+        value = float(measurement.numeric_value)
+    return MeasurementResponse(
+        id=measurement.id,
+        metric=measurement.metric.value,
+        value=value,
+        unit=UNITS[measurement.metric],
+        context=(
+            measurement.glucose_context.value
+            if isinstance(measurement.glucose_context, GlucoseContext)
+            else measurement.glucose_context
+        ),
+        measured_at=measurement.measured_at.astimezone(UTC),
+        recorded_at=measurement.recorded_at.astimezone(UTC),
+        source="manual",
+        note=measurement.note,
+    )
+
+
+def encode_cursor(measurement: Measurement) -> str:
+    payload = json.dumps(
+        [measurement.measured_at.isoformat(), str(measurement.id)], separators=(",", ":")
+    ).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def decode_cursor(cursor: str | None) -> tuple[datetime, UUID] | None:
+    if cursor is None:
+        return None
+    try:
+        payload = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        timestamp, identifier = json.loads(payload)
+        parsed = datetime.fromisoformat(timestamp)
+        if parsed.tzinfo is None:
+            raise ValueError
+        return parsed, UUID(identifier)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise DomainError(400, "invalid_request", "The pagination cursor is invalid.") from exc
+
+
+class MeasurementService:
+    PAGE_SIZE = 50
+
+    def __init__(self, db: Session):
+        self.repo = MeasurementRepository(db)
+        self.profiles = ProfileRepository(db)
+
+    def create(self, user: User, request: MeasurementCreate) -> MeasurementResponse:
+        metric = MetricType(request.metric)
+        if metric == MetricType.blood_pressure:
+            assert isinstance(request.value, BloodPressureValue)
+            numeric, systolic, diastolic = None, request.value.systolic, request.value.diastolic
+        else:
+            assert not isinstance(request.value, BloodPressureValue)
+            numeric, systolic, diastolic = Decimal(str(request.value)), None, None
+        measurement = Measurement(
+            user_id=user.id,
+            metric=metric,
+            numeric_value=numeric,
+            systolic=systolic,
+            diastolic=diastolic,
+            glucose_context=request.context,
+            measured_at=request.measured_at,
+            source="manual",
+            note=request.note,
+        )
+        self.repo.add(measurement)
+        return measurement_response(measurement)
+
+    def get(self, user: User, measurement_id: UUID) -> MeasurementResponse:
+        measurement = self.repo.by_id_for_user(measurement_id, user.id)
+        if measurement is None:
+            raise DomainError(404, "resource_not_found", "Measurement was not found.")
+        return measurement_response(measurement)
+
+    def list(self, user: User, cursor: str | None) -> MeasurementListResponse:
+        rows = self.repo.list_for_user(user.id, decode_cursor(cursor), self.PAGE_SIZE + 1)
+        has_more = len(rows) > self.PAGE_SIZE
+        visible = rows[: self.PAGE_SIZE]
+        return MeasurementListResponse(
+            items=[measurement_response(row) for row in visible],
+            next_cursor=encode_cursor(visible[-1]) if has_more else None,
+        )
+
+    def dashboard(
+        self, user: User
+    ) -> tuple[dict[str, MeasurementResponse | BmiProjection | None], datetime]:
+        latest = self.repo.latest_by_metric(user.id)
+        values: dict[str, MeasurementResponse | BmiProjection | None] = {
+            metric.value: measurement_response(latest[metric]) if metric in latest else None
+            for metric in MetricType
+        }
+        weight = latest.get(MetricType.weight)
+        profile = self.profiles.by_user_id(user.id)
+        bmi = None
+        if weight and profile and profile.height_cm:
+            bmi = BmiProjection(
+                value=round(float(weight.numeric_value) / (profile.height_cm / 100) ** 2, 2),
+                derived_from_measurement_id=weight.id,
+            )
+        values["bmi"] = bmi
+        return values, datetime.now(UTC)

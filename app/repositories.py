@@ -1,10 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import HealthProfile, SessionRecord, User
+from app.models import HealthProfile, Measurement, MetricType, SessionRecord, User
 
 
 class AuthRepository:
@@ -43,3 +43,53 @@ class ProfileRepository:
     def add(self, profile: HealthProfile) -> None:
         self.db.add(profile)
         self.db.flush()
+
+
+class MeasurementRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def add(self, measurement: Measurement) -> None:
+        self.db.add(measurement)
+        self.db.flush()
+
+    def by_id_for_user(self, measurement_id: UUID, user_id: UUID) -> Measurement | None:
+        return self.db.scalar(
+            select(Measurement).where(
+                Measurement.id == measurement_id, Measurement.user_id == user_id
+            )
+        )
+
+    def list_for_user(
+        self, user_id: UUID, cursor: tuple[datetime, UUID] | None, limit: int
+    ) -> list[Measurement]:
+        statement = select(Measurement).where(Measurement.user_id == user_id)
+        if cursor:
+            measured_at, measurement_id = cursor
+            statement = statement.where(
+                or_(
+                    Measurement.measured_at < measured_at,
+                    and_(
+                        Measurement.measured_at == measured_at,
+                        Measurement.id < measurement_id,
+                    ),
+                )
+            )
+        return list(
+            self.db.scalars(
+                statement.order_by(Measurement.measured_at.desc(), Measurement.id.desc()).limit(
+                    limit
+                )
+            )
+        )
+
+    def latest_by_metric(self, user_id: UUID) -> dict[MetricType, Measurement]:
+        rows = self.db.scalars(
+            select(Measurement)
+            .where(Measurement.user_id == user_id)
+            .order_by(Measurement.measured_at.desc(), Measurement.id.desc())
+        )
+        latest: dict[MetricType, Measurement] = {}
+        for row in rows:
+            latest.setdefault(row.metric, row)
+        return latest

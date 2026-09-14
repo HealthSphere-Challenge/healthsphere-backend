@@ -76,7 +76,7 @@ Metric and unit pairs are fixed. Clients do not submit a display-unit conversion
 
 A `weight` measurement is the authoritative record. Profile and dashboard responses may expose the latest weight as a read-only projection with its observation time. They must not maintain an independently editable profile weight.
 
-BMI is derived from the latest weight and profile height using `weight_kg / (height_m × height_m)`. The result records the source weight measurement ID and is null if either input is absent. Rounding/display precision is **PENDING HS-008**. `POST /api/v1/measurements` rejects `metric: "bmi"`.
+BMI is derived from the latest weight and profile height using `weight_kg / (height_m × height_m)`. The result records the source weight measurement ID and is null if either input is absent. The API rounds the projection to two decimal places. `POST /api/v1/measurements` rejects `metric: "bmi"`.
 
 ## Collections and nullability
 
@@ -89,4 +89,4 @@ BMI is derived from the latest weight and profile height using `weight_kg / (hei
 }
 ```
 
-An empty list means no matching observations. Optional scalar metadata can be null. Core discriminator fields (`metric`, `value`, `unit`, `measured_at`, `source`) are required and cannot be null. Partial measurement mutation is not defined: observations are immutable records for the MVP; deletion and correction behavior are **PENDING HS-008**.
+An empty list means no matching observations. Optional scalar metadata can be null. Core discriminator fields (`metric`, `value`, `unit`, `measured_at`, `source`) are required and cannot be null. Observations are immutable in the MVP. Repeated submissions remain distinct observations because the API has no client idempotency key; clients should avoid retrying a successful write. Deletion and correction are outside HS-008. Lists use an opaque cursor, newest observation first, with at most 50 items per page.

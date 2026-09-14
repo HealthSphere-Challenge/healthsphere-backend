@@ -1,8 +1,8 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -73,3 +73,98 @@ class AccountResponse(BaseModel):
     user: UserResponse
     profile: ProfileResponse
     csrf_token: str
+
+
+MetricName = Literal[
+    "heart_rate",
+    "blood_pressure",
+    "weight",
+    "blood_glucose",
+    "sleep_duration",
+    "physical_activity_duration",
+]
+GlucoseContextValue = Literal["fasting", "postprandial", "random", "unknown"]
+
+
+class BloodPressureValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    systolic: int = Field(strict=True, gt=0)
+    diastolic: int = Field(strict=True, gt=0)
+
+
+class MeasurementCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    metric: MetricName
+    value: int | float | BloodPressureValue
+    unit: Literal["bpm", "mmHg", "kg", "mg/dL", "min"]
+    context: GlucoseContextValue | None = None
+    measured_at: datetime
+    source: Literal["manual"] = "manual"
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("measured_at")
+    @classmethod
+    def explicit_offset(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Provide an RFC 3339 timestamp with an explicit offset")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def metric_shape(self) -> "MeasurementCreate":
+        expected_units = {
+            "heart_rate": "bpm",
+            "blood_pressure": "mmHg",
+            "weight": "kg",
+            "blood_glucose": "mg/dL",
+            "sleep_duration": "min",
+            "physical_activity_duration": "min",
+        }
+        if self.unit != expected_units[self.metric]:
+            raise ValueError("Use the canonical unit for this metric")
+        if self.metric == "blood_pressure":
+            if not isinstance(self.value, BloodPressureValue):
+                raise ValueError("Blood pressure requires paired systolic and diastolic integers")
+        elif isinstance(self.value, (BloodPressureValue, bool)):
+            raise ValueError("This metric requires one positive numeric value")
+        elif self.value <= 0:
+            raise ValueError("Measurement values must be positive")
+        if self.metric == "blood_glucose" and self.context is None:
+            raise ValueError("Blood glucose context is required")
+        if self.metric != "blood_glucose" and self.context is not None:
+            raise ValueError("Context is only supported for blood glucose")
+        if self.metric in {
+            "heart_rate",
+            "sleep_duration",
+            "physical_activity_duration",
+        } and (not isinstance(self.value, int) or isinstance(self.value, bool)):
+            raise ValueError("This metric requires an integer value")
+        return self
+
+
+class MeasurementResponse(BaseModel):
+    id: UUID
+    metric: MetricName | Literal["bmi"]
+    value: float | int | BloodPressureValue
+    unit: Literal["bpm", "mmHg", "kg", "kg/m2", "mg/dL", "min"]
+    context: GlucoseContextValue | None
+    measured_at: datetime
+    recorded_at: datetime
+    source: Literal["manual", "derived"]
+    note: str | None
+
+
+class MeasurementListResponse(BaseModel):
+    items: list[MeasurementResponse]
+    next_cursor: str | None
+
+
+class BmiProjection(BaseModel):
+    value: float
+    unit: Literal["kg/m2"] = "kg/m2"
+    derived_from_measurement_id: UUID
+
+
+class DashboardResponse(BaseModel):
+    generated_at: datetime
+    latest_measurements: dict[str, MeasurementResponse | BmiProjection | None]
+    latest_assessment: None = None
