@@ -22,4 +22,10 @@ Authenticate and authorize before querying or sending user context. Build minimu
 
 Use 2-second connect/10-second total AI timeouts and 2-second connect/30-second total Agent timeouts. Do not retry downstream application requests automatically in Phase 1. Do not hold a database transaction open across remote inference. Conversation retention is 30 days for the prototype and user deletion is required; deletion operations and backup behavior belong to HS-013/016. Map failures into the canonical safe API error while logging request IDs rather than medical payloads.
 
+HS-012 implements assessment orchestration as route → assessment service → feature builder,
+AI client and assessment repository. The service reads owned profile/measurement state, ends
+that read transaction, invokes AI, then opens a short persistence transaction only for a
+validated completed result. The versioned seven-feature input and full AI provenance are
+snapshotted with the result so later profile or measurement changes do not alter its meaning.
+
 See [contracts](../api/CONTRACTS.md), [database](../database/DATABASE_STRATEGY.md), [security](../security/SECURITY_AND_PRIVACY.md), and [testing](../testing/TESTING_STRATEGY.md).

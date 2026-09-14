@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.assessments import router as assessments_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.measurements import router as measurements_router
@@ -33,4 +34,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(health_router)
     app.include_router(measurements_router)
+    app.include_router(assessments_router)
     return app

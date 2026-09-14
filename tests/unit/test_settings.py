@@ -20,3 +20,18 @@ def test_cors_parses_explicit_origins() -> None:
         cors_origins="http://localhost:5173",
     )
     assert settings.cors_origins == ("http://localhost:5173",)
+
+
+def test_production_requires_ai_service_configuration() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            database_url="postgresql+psycopg://user:pass@localhost/db",
+            app_environment="production",
+        )
+    settings = Settings(
+        database_url="postgresql+psycopg://user:pass@localhost/db",
+        app_environment="production",
+        ai_service_url="http://ai:8001/",
+        ai_internal_token="configured-outside-git",
+    )
+    assert settings.ai_service_url == "http://ai:8001"

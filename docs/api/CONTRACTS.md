@@ -162,21 +162,35 @@ The request omits server-generated `id` and `recorded_at`. `note` is optional, m
 
 The map contains each approved metric key; a value is null when no observation/projection exists. Freshness labels or clinical interpretations are not defined in HS-002.
 
-## Assessment — transport approved; semantics PENDING HS-010
+## Assessment — HS-012 application contract
 
 `POST /api/v1/assessments` asks the backend to assemble authorized inputs and invoke AI. The browser cannot submit a score or model features. `GET /api/v1/assessments/{assessment_id}` returns a stored result; `GET /api/v1/assessments?cursor=` returns a paginated history.
 
 ```json
 {
   "id": "c63f9048-9510-4eb5-8c0d-73bb5cb3fe8b",
-  "status": "insufficient_data",
-  "result": null,
-  "reason": { "code": "minimum_inputs_missing", "missing_fields": ["pending_hs_010"] },
+  "status": "completed",
+  "result": {
+    "target_id": "incident_essential_hypertension_5y_v1",
+    "feature_schema_version": "hypertension_features_v1",
+    "model_version": "hypertension_5y_v1.0.0",
+    "preprocessing_version": "hypertension_preprocessing_v1",
+    "prediction_horizon_days": 1825,
+    "score": 0.1234,
+    "score_type": "uncalibrated_experimental_probability_estimate",
+    "calibrated": false,
+    "data_source_type": "synthetic_model"
+  },
+  "reason": null,
   "created_at": "2026-09-13T09:05:43.000Z"
 }
 ```
 
-Statuses are `completed`, `insufficient_data`, `ineligible`, or `unavailable`. A completed `result` must carry the approved target, eligible population, horizon, score semantics, calibration/version provenance, labels/thresholds if any, and explanation method. Every one of those concepts remains **PENDING HS-010**. Until HS-010 approves them, no completed-result example or fallback score is valid.
+Statuses are `completed`, `insufficient_data`, `ineligible`, or `unavailable`. Only completed
+results are persisted. Missing age or paired BP produces `insufficient_data`; age below 18
+produces `ineligible`; AI execution failure produces `unavailable` or a canonical transport
+error. No non-completed result contains a score. The synchronous POST returns HTTP 200 for
+contract status outcomes.
 
 ## Conversation — transport approved; behavior PENDING HS-013
 
@@ -211,7 +225,7 @@ Statuses are `completed`, `insufficient_data`, `ineligible`, or `unavailable`. A
 
 Conversation retention is 30 days for the prototype, measured from creation for this contract. Users must be able to delete conversations. Operational deletion timing and backup behavior are **PENDING HS-013/HS-016**. The exact title behavior, message limits, source shape, safety taxonomy, and approved user-facing copy are **PENDING HS-013**. Assistant response types are `answer`, `follow_up`, `abstention`, or `urgent`; consumers preserve these distinct states.
 
-## Backend → AI → backend — transport approved; semantics PENDING HS-010
+## Backend → AI → backend — HS-011/HS-012 contract
 
 The backend calls `POST /internal/v1/inferences` with an opaque bearer credential, `X-Request-ID`, and a schema-versioned body. The AI connect timeout is 2 seconds and total timeout is 10 seconds. There are no automatic application retries initially.
 
@@ -220,11 +234,22 @@ The backend calls `POST /internal/v1/inferences` with an opaque bearer credentia
   "schema_version": "1.0",
   "request_id": "c4a760a8-7d0b-4f98-9652-244be1ebcc2e",
   "subject_ref": "f630d635-64e2-432b-8175-60f61d220d4d",
-  "features": { "pending_hs_010": true }
+  "features": {
+    "age_years": 42,
+    "systolic_blood_pressure": 128,
+    "diastolic_blood_pressure": 82,
+    "heart_rate": 76,
+    "bmi": 24.7,
+    "sex_at_birth": "female",
+    "smoking_status": "never"
+  }
 }
 ```
 
-The pseudonymous `subject_ref` is request-scoped or service-scoped and is not the application user ID. AI must return one of `completed`, `insufficient_data`, `ineligible`, or `unavailable`. A completed payload is forbidden until HS-010 defines the target, eligible population, horizon, feature schema, minimum inputs, score semantics, calibration, risk labels, thresholds, and explanation method. See the AI repository contract for the stable provenance/error structure.
+The pseudonymous `subject_ref` is a fresh request-scoped UUIDv4 and is not the application
+user ID. Only `features` enters the model contract. HS-010/011 froze the target, schema,
+model, preprocessing and uncalibrated score semantics. The backend rejects incompatible
+target/schema/model responses and never applies the Stage 9 evaluation threshold.
 
 ## Backend → Agent → backend — transport approved; behavior PENDING HS-013
 
