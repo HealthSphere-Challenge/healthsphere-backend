@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import AuthServiceDep, CurrentSession
+from app.assessment_service import AssessmentService
 from app.db.session import get_db
 from app.schemas import (
     DashboardResponse,
@@ -50,4 +51,9 @@ def get_measurement(
 @router.get("/dashboard", response_model=DashboardResponse)
 def dashboard(authenticated: CurrentSession, db: Db) -> DashboardResponse:
     values, generated_at = MeasurementService(db).dashboard(authenticated.user)
-    return DashboardResponse(generated_at=generated_at, latest_measurements=values)
+    assessments = AssessmentService(db).list(authenticated.user, None).items
+    return DashboardResponse(
+        generated_at=generated_at,
+        latest_measurements=values,
+        latest_assessment=assessments[0] if assessments else None,
+    )

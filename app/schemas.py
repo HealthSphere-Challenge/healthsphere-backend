@@ -167,4 +167,34 @@ class BmiProjection(BaseModel):
 class DashboardResponse(BaseModel):
     generated_at: datetime
     latest_measurements: dict[str, MeasurementResponse | BmiProjection | None]
-    latest_assessment: None = None
+    latest_assessment: "AssessmentResponse | None" = None
+
+
+class AssessmentResult(BaseModel):
+    target_id: Literal["incident_essential_hypertension_5y_v1"]
+    feature_schema_version: Literal["hypertension_features_v1"]
+    model_version: Literal["hypertension_5y_v1.0.0"]
+    preprocessing_version: Literal["hypertension_preprocessing_v1"]
+    prediction_horizon_days: Literal[1825]
+    score: float = Field(ge=0, le=1, allow_inf_nan=False)
+    score_type: Literal["uncalibrated_experimental_probability_estimate"]
+    calibrated: Literal[False]
+    data_source_type: Literal["synthetic_model"] = "synthetic_model"
+
+
+class AssessmentReason(BaseModel):
+    code: str
+    missing_fields: list[str] | None = None
+
+
+class AssessmentResponse(BaseModel):
+    id: UUID
+    status: Literal["completed", "insufficient_data", "ineligible", "unavailable"]
+    result: AssessmentResult | None
+    reason: AssessmentReason | None
+    created_at: datetime
+
+
+class AssessmentListResponse(BaseModel):
+    items: list[AssessmentResponse]
+    next_cursor: str | None

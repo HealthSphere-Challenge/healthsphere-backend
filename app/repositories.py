@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import HealthProfile, Measurement, MetricType, SessionRecord, User
+from app.models import HealthProfile, Measurement, MetricType, RiskAssessment, SessionRecord, User
 
 
 class AuthRepository:
@@ -93,3 +93,49 @@ class MeasurementRepository:
         for row in rows:
             latest.setdefault(row.metric, row)
         return latest
+
+
+class AssessmentRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def add(self, assessment: RiskAssessment) -> None:
+        self.db.add(assessment)
+        self.db.flush()
+
+    def by_request_for_user(self, request_id: UUID, user_id: UUID) -> RiskAssessment | None:
+        return self.db.scalar(
+            select(RiskAssessment).where(
+                RiskAssessment.request_id == request_id, RiskAssessment.user_id == user_id
+            )
+        )
+
+    def by_id_for_user(self, assessment_id: UUID, user_id: UUID) -> RiskAssessment | None:
+        return self.db.scalar(
+            select(RiskAssessment).where(
+                RiskAssessment.id == assessment_id, RiskAssessment.user_id == user_id
+            )
+        )
+
+    def list_for_user(
+        self, user_id: UUID, cursor: tuple[datetime, UUID] | None, limit: int
+    ) -> list[RiskAssessment]:
+        statement = select(RiskAssessment).where(RiskAssessment.user_id == user_id)
+        if cursor:
+            created_at, assessment_id = cursor
+            statement = statement.where(
+                or_(
+                    RiskAssessment.created_at < created_at,
+                    and_(
+                        RiskAssessment.created_at == created_at,
+                        RiskAssessment.id < assessment_id,
+                    ),
+                )
+            )
+        return list(
+            self.db.scalars(
+                statement.order_by(
+                    RiskAssessment.created_at.desc(), RiskAssessment.id.desc()
+                ).limit(limit)
+            )
+        )

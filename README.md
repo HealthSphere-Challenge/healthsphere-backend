@@ -41,3 +41,32 @@ DATABASE_URL="$TEST_DATABASE_URL" uv run alembic check
 Create future approved schema migrations with `uv run alembic revision --autogenerate -m "description"`. Apply with `uv run alembic upgrade head`; revert one revision with `uv run alembic downgrade -1`. HS-004 intentionally has no baseline product migration because metadata is empty.
 
 Use short-lived branches → PR → main, no develop; no silent merge.
+# HS-012 hypertension assessments
+
+The browser calls the authenticated backend assessment API; it never calls
+`healthsphere-ai` directly. Configure the internal service connection:
+
+```bash
+HEALTHSPHERE_AI_SERVICE_URL=http://127.0.0.1:8001
+HEALTHSPHERE_AI_INTERNAL_TOKEN=replace-with-the-shared-local-secret
+HEALTHSPHERE_AI_CONNECT_TIMEOUT_SECONDS=2
+HEALTHSPHERE_AI_TIMEOUT_SECONDS=10
+```
+
+The backend exposes synchronous `POST /api/v1/assessments`,
+`GET /api/v1/assessments`, and `GET /api/v1/assessments/{assessment_id}`.
+Creation requires the existing session cookie and CSRF header. It builds
+`hypertension_features_v1` from profile data and the latest authoritative paired BP,
+heart-rate and weight records, then calls `POST /internal/v1/inferences` with bearer
+authentication and matching request IDs.
+
+Only completed results are persisted. The record preserves the seven-value input snapshot,
+target/schema/model/preprocessing versions, horizon, score semantics, calibration flag and
+correlation ID. Other outcomes contain no score. The score is an uncalibrated experimental
+estimate produced by a model trained only on synthetic Synthea data; it is not clinically
+validated and must not be used for diagnosis, treatment, emergency triage or a risk category.
+
+For a manual smoke test, start PostgreSQL and apply `alembic upgrade head`; start the AI
+service on port 8001 with the same internal token; start this backend; register/login; add a
+date of birth, height, paired BP, optional heart rate and weight; then POST an assessment and
+retrieve it from the assessment history. No automatic AI retry is performed.

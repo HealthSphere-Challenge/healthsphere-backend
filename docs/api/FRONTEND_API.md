@@ -19,7 +19,7 @@ The frontend calls only the backend under `/api/v1`. It never calls AI, Agent, P
 | `GET` | `/api/v1/measurements?cursor=` | optional opaque cursor | `200` paginated measurements |
 | `GET` | `/api/v1/measurements/{measurement_id}` | session cookie | `200` owned measurement resource |
 | `GET` | `/api/v1/dashboard` | session cookie | `200` dashboard resource |
-| `POST` | `/api/v1/assessments` | CSRF header | `202` or `200` assessment resource; exact completion choice **PENDING HS-012-BE** |
+| `POST` | `/api/v1/assessments` | CSRF header | `200` assessment status/resource |
 | `GET` | `/api/v1/assessments/{assessment_id}` | session cookie | `200` assessment resource |
 | `GET` | `/api/v1/assessments?cursor=` | optional opaque cursor | `200` paginated assessments |
 | `POST` | `/api/v1/conversations` | optional approved creation fields + CSRF | `201` conversation resource |
