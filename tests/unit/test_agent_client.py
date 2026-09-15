@@ -75,6 +75,22 @@ def test_client_rejects_mismatched_request_id(monkeypatch: pytest.MonkeyPatch) -
         HealthSphereAgentClient("http://agent", "secret", 30, 2).respond(payload)
 
 
+def test_client_accepts_contract_source_without_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = request_payload()
+    body = response_json(payload.request_id)
+    body["response_type"] = "answer"
+    body["sources"] = [{"source_id": "assessment:v1", "title": "Saved assessment", "url": None}]
+    monkeypatch.setattr(
+        httpx,
+        "post",
+        lambda url, **kwargs: httpx.Response(200, json=body, request=httpx.Request("POST", url)),
+    )
+    assert (
+        HealthSphereAgentClient("http://agent", "secret", 30, 2).respond(payload).sources[0].url
+        is None
+    )
+
+
 def test_client_does_not_retry_transport_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
 
