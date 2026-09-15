@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     agent_internal_token: str | None = None
     agent_timeout_seconds: float = Field(default=30.0, gt=0, le=60)
     agent_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
+    demo_password: str | None = Field(default=None, min_length=12, max_length=128, repr=False)
     cors_origins: tuple[str, ...] = ()
     session_cookie_name: str = "healthsphere_session"
     session_absolute_seconds: int = 604800
