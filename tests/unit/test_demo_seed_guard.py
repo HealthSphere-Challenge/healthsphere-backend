@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.settings import Settings
-from app.scripts.seed_demo import DemoSeedError, require_safe_environment
+from app.scripts.seed_demo import ASSESSMENT_REQUEST_ID, DemoSeedError, require_safe_environment
 
 
 @pytest.mark.parametrize("environment", ["development", "test"])
@@ -23,3 +23,7 @@ def test_demo_password_is_not_exposed_by_settings_repr() -> None:
         demo_password=password,
     )
     assert password not in repr(settings)
+
+
+def test_assessment_preparation_uses_a_stable_uuid4_request_id() -> None:
+    assert ASSESSMENT_REQUEST_ID.version == 4

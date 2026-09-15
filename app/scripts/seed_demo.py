@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_client import HealthSphereAiClient
 from app.assessment_service import AssessmentService
+from app.core.errors import DomainError
 from app.core.settings import Settings, get_settings
 from app.db.session import create_database_engine, create_session_factory
 from app.models import (
@@ -36,7 +37,7 @@ DEMO_EMAILS = (
     "demo.assessment@example.com",
     "demo.assistant@example.com",
 )
-ASSESSMENT_REQUEST_ID = uuid5(NAMESPACE_URL, "healthsphere-demo/assessment/request")
+ASSESSMENT_REQUEST_ID = UUID("f5d21b60-7b67-4b19-8d65-19d6022a9c01")
 
 
 class DemoSeedError(RuntimeError):
@@ -371,7 +372,10 @@ def prepare_assessment(db: Session, settings: Settings) -> str:
         settings.ai_timeout_seconds,
         settings.ai_connect_timeout_seconds,
     )
-    response = AssessmentService(db, client).create(user, ASSESSMENT_REQUEST_ID)
+    try:
+        response = AssessmentService(db, client).create(user, ASSESSMENT_REQUEST_ID)
+    except DomainError as exc:
+        raise DemoSeedError(str(exc)) from None
     if response.status != "completed":
         raise DemoSeedError(f"AI assessment preparation returned {response.status}.")
     return str(response.id)
