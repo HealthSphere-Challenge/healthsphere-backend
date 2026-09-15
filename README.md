@@ -84,3 +84,10 @@ Conversations expire after 30 days and can be deleted through the API. A message
 is stored only after the agent returns a valid, correlated response, so an unavailable or
 incompatible agent leaves no unmatched user message. The backend performs no automatic
 retry and preserves the response state, sources, safety, uncertainty, and provenance.
+
+Assistant context is routed before Agent invocation. Explicit questions about the signed-in
+user's profile or latest saved measurement are answered deterministically from ownership-
+scoped backend records with no MedQuAD sources. General medical questions still use Agent
+RAG, selected assessments still send only their approved context, and broad personal-data
+requests ask the user to narrow the request. These application-data answers follow the same
+30-day conversation retention policy and are never written to logs.

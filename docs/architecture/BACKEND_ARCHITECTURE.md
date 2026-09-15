@@ -29,3 +29,31 @@ validated completed result. The versioned seven-feature input and full AI proven
 snapshotted with the result so later profile or measurement changes do not alter its meaning.
 
 See [contracts](../api/CONTRACTS.md), [database](../database/DATABASE_STRATEGY.md), [security](../security/SECURITY_AND_PRIVACY.md), and [testing](../testing/TESTING_STRATEGY.md).
+
+## Assistant context routing
+
+Before any Agent invocation, `AssistantContextRouter` makes a deterministic, enum-based
+routing decision from the current message and the presence of an explicitly selected
+assessment. It does not fetch records or interpret health values.
+
+- Explicit profile questions read only allowlisted fields from the authenticated user's
+  `HealthProfile` and produce a deterministic application-data response.
+- Explicit latest-measurement questions read only the requested metric for that user and
+  report its stored value and observation time without clinical interpretation.
+- A selected assessment remains ownership-scoped and sends only the frozen approved
+  assessment fields to the Agent.
+- General medical-information questions use Agent RAG with no profile or measurement
+  context.
+- Broad requests for all health records receive a narrowing question rather than a health
+  dossier.
+
+Application-data answers have no MedQuAD sources and are persisted under the existing
+30-day conversation policy. This means a user-requested profile value can appear in message
+content until that conversation expires or is deleted. Message and health values remain
+excluded from logs. The full profile and measurement history are never sent to the Agent.
+
+The observed French application-data query retrieved an unrelated Williams syndrome chunk
+at cosine score 0.211, just above the Agent's 0.20 minimum. The supported query “What does
+high blood pressure mean?” returned four High Blood Pressure chunks at 0.722–0.795. Because
+application-data routing removes the failing query before retrieval while supported medical
+retrieval remains strong, this fix does not change the Agent threshold or index.

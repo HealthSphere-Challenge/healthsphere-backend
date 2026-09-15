@@ -44,7 +44,7 @@ class AgentRequest(StrictModel):
 class AgentSource(StrictModel):
     source_id: str
     title: str
-    url: str
+    url: str | None
 
 
 class AgentSafety(StrictModel):

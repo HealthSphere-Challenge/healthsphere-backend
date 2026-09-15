@@ -18,16 +18,20 @@ from app.agent_client import (
     AgentTurn,
     HealthSphereAgentClient,
 )
+from app.assistant_context import AssistantContextMode, AssistantContextRouter
 from app.core.errors import DomainError
 from app.models import (
     Conversation,
     ConversationMessage,
     ConversationRole,
+    HealthProfile,
+    Measurement,
+    MetricType,
     RiskAssessment,
     User,
 )
 from app.schemas import ConversationListResponse, ConversationMessageResponse, ConversationResponse
-from app.services import decode_cursor
+from app.services import age_years, decode_cursor
 
 
 def message_response(row: ConversationMessage) -> ConversationMessageResponse:
@@ -133,9 +137,26 @@ class ConversationService:
     def send(
         self, user: User, conversation_id: UUID, text: str, assessment_id: UUID | None
     ) -> ConversationResponse:
-        if self.agent is None:
-            raise RuntimeError("Agent client is required")
         row = self._owned(user, conversation_id)
+        decision = AssistantContextRouter().route(text, assessment_id is not None)
+        if decision.mode == AssistantContextMode.own_profile_data:
+            return self._persist_deterministic(
+                row, text, self._profile_answer(user, decision.requested_fields)
+            )
+        if decision.mode == AssistantContextMode.own_latest_measurements:
+            return self._persist_deterministic(
+                row, text, self._measurement_answer(user, decision.requested_fields)
+            )
+        if decision.mode == AssistantContextMode.unsupported_or_ambiguous:
+            return self._persist_deterministic(
+                row,
+                text,
+                "Please ask about a specific profile field, saved measurement, or HealthSphere "
+                "assessment so I can use only the information you intend to access.",
+                response_type="follow_up",
+            )
+        if self.agent is None:
+            raise DomainError(503, "agent_unavailable", "The assistant service is unavailable.")
         assessment = None
         if assessment_id:
             assessment = self.db.scalar(
@@ -206,3 +227,123 @@ class ConversationService:
         self.db.flush()
         self.db.expire(row, ["messages"])
         return conversation_response(row)
+
+    def _persist_deterministic(
+        self,
+        row: Conversation,
+        user_text: str,
+        answer: str,
+        response_type: str = "answer",
+    ) -> ConversationResponse:
+        now = datetime.now(UTC)
+        self.db.add_all(
+            [
+                ConversationMessage(
+                    conversation_id=row.id,
+                    role=ConversationRole.user,
+                    content=user_text,
+                    created_at=now,
+                ),
+                ConversationMessage(
+                    conversation_id=row.id,
+                    role=ConversationRole.assistant,
+                    content=answer,
+                    response_type=response_type,
+                    sources=[],
+                    safety={"urgent": False, "reason": None},
+                    uncertainty=None,
+                    provenance={"source_type": "application_data"},
+                    created_at=now + timedelta(microseconds=1),
+                ),
+            ]
+        )
+        row.updated_at = now
+        self.db.flush()
+        self.db.expire(row, ["messages"])
+        return conversation_response(row)
+
+    def _profile_answer(self, user: User, fields: tuple[str, ...]) -> str:
+        profile = self.db.scalar(select(HealthProfile).where(HealthProfile.user_id == user.id))
+        if profile is None:
+            return "I don't have a HealthSphere profile saved for you yet."
+        selected = fields or (
+            "date_of_birth",
+            "sex_at_birth",
+            "height_cm",
+            "smoking_status",
+            "allergies",
+            "medications",
+            "medical_conditions",
+            "activity_level",
+            "typical_sleep_minutes",
+        )
+        labels = {
+            "date_of_birth": "Age",
+            "sex_at_birth": "Sex at birth",
+            "height_cm": "Height",
+            "smoking_status": "Smoking status",
+            "allergies": "Allergies",
+            "medications": "Medications",
+            "medical_conditions": "Medical conditions",
+            "activity_level": "Activity level",
+            "typical_sleep_minutes": "Typical sleep",
+        }
+        lines = []
+        for field in selected:
+            value: object = getattr(profile, field)
+            if field == "date_of_birth":
+                value = age_years(profile.date_of_birth)
+            elif field == "height_cm" and value is not None:
+                value = f"{value:g} cm"
+            elif field == "typical_sleep_minutes" and value is not None:
+                value = f"{value} minutes"
+            elif isinstance(value, list):
+                value = ", ".join(value) if value else "Not provided"
+            elif hasattr(value, "value"):
+                value = value.value
+            if value is None:
+                value = "Not provided"
+            lines.append(f"• {labels[field]}: {value}")
+        return "Your HealthSphere profile currently includes:\n" + "\n".join(lines)
+
+    def _measurement_answer(self, user: User, fields: tuple[str, ...]) -> str:
+        if not fields:
+            return (
+                "Which latest saved measurement would you like: blood pressure, heart rate, "
+                "weight, blood glucose, sleep duration, or activity duration?"
+            )
+        metric = MetricType(fields[0])
+        measurement = self.db.scalar(
+            select(Measurement)
+            .where(Measurement.user_id == user.id, Measurement.metric == metric)
+            .order_by(Measurement.measured_at.desc(), Measurement.id.desc())
+            .limit(1)
+        )
+        labels = {
+            MetricType.blood_pressure: "blood pressure",
+            MetricType.heart_rate: "heart rate",
+            MetricType.weight: "weight",
+            MetricType.blood_glucose: "blood glucose",
+            MetricType.sleep_duration: "sleep duration",
+            MetricType.physical_activity_duration: "physical activity duration",
+        }
+        if measurement is None:
+            return f"I don't have a saved {labels[metric]} measurement for you yet."
+        units = {
+            MetricType.blood_pressure: "mmHg",
+            MetricType.heart_rate: "bpm",
+            MetricType.weight: "kg",
+            MetricType.blood_glucose: "mg/dL",
+            MetricType.sleep_duration: "minutes",
+            MetricType.physical_activity_duration: "minutes",
+        }
+        value = (
+            f"{measurement.systolic}/{measurement.diastolic}"
+            if metric == MetricType.blood_pressure
+            else f"{measurement.numeric_value:g}"
+        )
+        recorded = measurement.measured_at.astimezone(UTC).strftime("%B %-d, %Y at %H:%M UTC")
+        return (
+            f"Your latest saved {labels[metric]} is {value} {units[metric]}, "
+            f"recorded on {recorded}."
+        )

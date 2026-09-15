@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.agent_client import HealthSphereAgentClient
 from app.api.auth import AuthServiceDep, CurrentSession
 from app.conversation_service import ConversationService
-from app.core.errors import DomainError
 from app.core.settings import Settings
 from app.db.session import get_db
 from app.schemas import ConversationListResponse, ConversationMessageCreate, ConversationResponse
@@ -17,10 +16,10 @@ Db = Annotated[Session, Depends(get_db)]
 CsrfHeader = Annotated[str | None, Header()]
 
 
-def get_agent_client(request: Request) -> HealthSphereAgentClient:
+def get_agent_client(request: Request) -> HealthSphereAgentClient | None:
     settings: Settings = request.app.state.settings
     if not settings.agent_service_url or not settings.agent_internal_token:
-        raise DomainError(503, "agent_unavailable", "The assistant service is unavailable.")
+        return None
     return HealthSphereAgentClient(
         settings.agent_service_url,
         settings.agent_internal_token,
@@ -29,7 +28,7 @@ def get_agent_client(request: Request) -> HealthSphereAgentClient:
     )
 
 
-AgentClient = Annotated[HealthSphereAgentClient, Depends(get_agent_client)]
+AgentClient = Annotated[HealthSphereAgentClient | None, Depends(get_agent_client)]
 
 
 @router.post("", status_code=201, response_model=ConversationResponse)
