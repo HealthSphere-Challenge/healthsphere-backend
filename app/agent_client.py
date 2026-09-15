@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
 
 
 class StrictModel(BaseModel):
@@ -44,7 +44,7 @@ class AgentRequest(StrictModel):
 class AgentSource(StrictModel):
     source_id: str
     title: str
-    url: str | None
+    url: HttpUrl | None
 
 
 class AgentSafety(StrictModel):

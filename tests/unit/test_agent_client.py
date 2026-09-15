@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.agent_client import (
     AgentContractError,
@@ -89,6 +90,17 @@ def test_client_accepts_contract_source_without_url(monkeypatch: pytest.MonkeyPa
         HealthSphereAgentClient("http://agent", "secret", 30, 2).respond(payload).sources[0].url
         is None
     )
+
+
+def test_agent_response_rejects_unsafe_source_url() -> None:
+    from app.agent_client import AgentResponse
+
+    body = response_json(uuid4())
+    body["response_type"] = "answer"
+    body["sources"] = [{"source_id": "s1", "title": "Unsafe", "url": "javascript:alert(1)"}]
+
+    with pytest.raises(ValidationError):
+        AgentResponse.model_validate(body)
 
 
 def test_client_does_not_retry_transport_failure(monkeypatch: pytest.MonkeyPatch) -> None:
