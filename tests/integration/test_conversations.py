@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -180,3 +182,161 @@ def test_conversations_require_authentication_and_csrf(environment) -> None:
     assert client.get("/api/v1/conversations").status_code == 401
     register(client)
     assert client.post("/api/v1/conversations").status_code == 403
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What health data is in my profile?",
+        "donner les données da ma santé dans mon profil",
+    ],
+)
+def test_profile_questions_use_authoritative_data_without_agent(environment, question: str) -> None:
+    client, app, _ = environment
+    csrf = register(client)
+    client.patch(
+        "/api/v1/profile",
+        headers={"X-CSRF-Token": csrf},
+        json={
+            "height_cm": 180,
+            "smoking_status": "never",
+            "allergies": ["pollen"],
+        },
+    )
+    fake = FakeAgent("answer")
+    app.dependency_overrides[get_agent_client] = lambda: fake
+    conversation_id = client.post("/api/v1/conversations", headers={"X-CSRF-Token": csrf}).json()[
+        "id"
+    ]
+    response = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"content": question},
+    )
+    assistant = response.json()["messages"][1]
+    assert "Height: 180 cm" in assistant["content"]
+    assert "Smoking status: never" in assistant["content"]
+    assert "pollen" in assistant["content"]
+    assert assistant["sources"] == []
+    assert "Williams syndrome" not in assistant["content"]
+    assert fake.requests == []
+    assert str(response.json()).find("assistant@example.test") == -1
+
+
+def test_single_profile_field_returns_only_that_field(environment) -> None:
+    client, app, _ = environment
+    csrf = register(client)
+    client.patch(
+        "/api/v1/profile",
+        headers={"X-CSRF-Token": csrf},
+        json={
+            "height_cm": 180,
+            "smoking_status": "never",
+        },
+    )
+    fake = FakeAgent()
+    app.dependency_overrides[get_agent_client] = lambda: fake
+    conversation_id = client.post("/api/v1/conversations", headers={"X-CSRF-Token": csrf}).json()[
+        "id"
+    ]
+    assistant = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"content": "What is my height?"},
+    ).json()["messages"][1]
+    assert assistant["content"].splitlines() == [
+        "Your HealthSphere profile currently includes:",
+        "• Height: 180 cm",
+    ]
+    assert fake.requests == []
+
+
+def test_latest_blood_pressure_is_reported_without_interpretation_or_rag(environment) -> None:
+    client, app, _ = environment
+    csrf = register(client)
+    client.post(
+        "/api/v1/measurements",
+        headers={"X-CSRF-Token": csrf},
+        json={
+            "metric": "blood_pressure",
+            "value": {"systolic": 128, "diastolic": 82},
+            "unit": "mmHg",
+            "context": None,
+            "measured_at": "2026-09-15T10:00:00Z",
+            "source": "manual",
+            "note": None,
+        },
+    )
+    fake = FakeAgent("answer")
+    app.dependency_overrides[get_agent_client] = lambda: fake
+    conversation_id = client.post("/api/v1/conversations", headers={"X-CSRF-Token": csrf}).json()[
+        "id"
+    ]
+    assistant = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"content": "What is my latest blood pressure?"},
+    ).json()["messages"][1]
+    assert "128/82 mmHg" in assistant["content"]
+    assert not any(
+        word in assistant["content"].lower() for word in ("normal", "healthy", "hypertensive")
+    )
+    assert assistant["sources"] == []
+    assert fake.requests == []
+
+
+def test_missing_measurement_does_not_fall_back_to_rag(environment) -> None:
+    client, app, _ = environment
+    csrf = register(client)
+    fake = FakeAgent("answer")
+    app.dependency_overrides[get_agent_client] = lambda: fake
+    conversation_id = client.post("/api/v1/conversations", headers={"X-CSRF-Token": csrf}).json()[
+        "id"
+    ]
+    assistant = client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"content": "What is my latest heart rate?"},
+    ).json()["messages"][1]
+    assert "don't have a saved heart rate" in assistant["content"]
+    assert assistant["sources"] == [] and fake.requests == []
+
+
+def test_selected_assessment_keeps_approved_agent_context(environment) -> None:
+    client, app, factory = environment
+    csrf = register(client)
+    with factory.begin() as db:
+        user = db.scalar(select(User).where(User.email == "assistant@example.test"))
+        assert user is not None
+        assessment = RiskAssessment(
+            user_id=user.id,
+            request_id=UUID("77777777-7777-4777-8777-777777777777"),
+            target_id="incident_essential_hypertension_5y_v1",
+            feature_schema_version="hypertension_features_v1",
+            model_version="hypertension_5y_v1.0.0",
+            preprocessing_version="hypertension_preprocessing_v1",
+            prediction_horizon_days=1825,
+            score=Decimal("0.42"),
+            score_type="uncalibrated_experimental_probability_estimate",
+            calibrated=False,
+            input_snapshot={},
+            provenance_snapshot={},
+            created_at=datetime.now(UTC),
+        )
+        db.add(assessment)
+        db.flush()
+        assessment_id = str(assessment.id)
+    fake = FakeAgent("answer")
+    app.dependency_overrides[get_agent_client] = lambda: fake
+    conversation_id = client.post("/api/v1/conversations", headers={"X-CSRF-Token": csrf}).json()[
+        "id"
+    ]
+    client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-CSRF-Token": csrf},
+        json={"content": "Explain my selected assessment", "assessment_id": assessment_id},
+    ).raise_for_status()
+    context = fake.requests[0].health_context
+    assert context.profile is None and context.measurements == []
+    assert context.assessment is not None
+    assert context.assessment.score == 0.42
