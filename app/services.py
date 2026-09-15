@@ -30,6 +30,19 @@ from app.schemas import (
 _passwords = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 
 
+def hash_password(password: str) -> str:
+    """Hash a password with the application's authoritative password hasher."""
+    return _passwords.hash(password)
+
+
+def verify_password(password_hash: str, password: str) -> bool:
+    """Verify a password without exposing Argon2 details to callers."""
+    try:
+        return _passwords.verify(password_hash, password)
+    except (VerifyMismatchError, InvalidHashError):
+        return False
+
+
 @dataclass
 class AuthenticatedSession:
     user: User
@@ -60,7 +73,7 @@ class AuthService:
             )
         user = User(
             email=email,
-            password_hash=_passwords.hash(request.password),
+            password_hash=hash_password(request.password),
             display_name=request.display_name.strip(),
         )
         try:
@@ -74,15 +87,12 @@ class AuthService:
 
     def login(self, email: str, password: str) -> AuthenticatedSession:
         user = self.auth.user_by_email(normalize_email(email))
-        stored = user.password_hash if user else _passwords.hash("invalid credential padding")
-        try:
-            valid = _passwords.verify(stored, password)
-        except (VerifyMismatchError, InvalidHashError):
-            valid = False
+        stored = user.password_hash if user else hash_password("invalid credential padding")
+        valid = verify_password(stored, password)
         if not user or not valid:
             raise DomainError(401, "invalid_credentials", "Email or password is incorrect.")
         if _passwords.check_needs_rehash(user.password_hash):
-            user.password_hash = _passwords.hash(password)
+            user.password_hash = hash_password(password)
         return self._create_session(user)
 
     def _create_session(self, user: User) -> AuthenticatedSession:

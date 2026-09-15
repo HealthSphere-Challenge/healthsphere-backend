@@ -91,3 +91,61 @@ scoped backend records with no MedQuAD sources. General medical questions still 
 RAG, selected assessments still send only their approved context, and broad personal-data
 requests ask the user to narrow the request. These application-data answers follow the same
 30-day conversation retention policy and are never written to logs.
+
+## Demo data (HS-021)
+
+The demo seed creates fictional local accounts, profiles, supported measurements, and one
+clearly marked conversation fixture. It is manually invoked, never runs at startup or during a
+migration, and refuses every environment except `development` and `test`. Never point the
+command at production or use real patient information.
+
+Set a local password of 12–128 characters without committing it, apply migrations, then seed:
+
+```bash
+export HEALTHSPHERE_APP_ENVIRONMENT=development
+export HEALTHSPHERE_DEMO_PASSWORD='choose-a-local-demo-password'
+uv run alembic upgrade head
+uv run python -m app.scripts.seed_demo
+```
+
+The command is idempotent. It uses stable identifiers and fixed August/September 2026 fixture
+times. It prints counts and account addresses, but never prints the password, hashes, cookies,
+tokens, or health payloads. All accounts use the same value supplied through
+`HEALTHSPHERE_DEMO_PASSWORD`:
+
+| Account | Purpose |
+| --- | --- |
+| `demo.complete@example.com` | Authentication, complete profile, dashboard, and history |
+| `demo.elevated@example.com` | A distinct synthetic BP/ML feature vector; no diagnosis |
+| `demo.incomplete@example.com` | Missing paired blood pressure for fail-closed ML behavior |
+| `demo.assessment@example.com` | Complete inputs for real AI assessment and explanation flow |
+| `demo.assistant@example.com` | Benign persisted conversation and Assistant UI behavior |
+
+The base seed does not fabricate a model result. With the AI service running and the backend AI
+URL/token configured, prepare Persona D through the real `AssessmentService` and AI contract:
+
+```bash
+uv run python -m app.scripts.seed_demo --prepare-assessment
+```
+
+The stable assessment request ID makes repeated preparation idempotent. Its score and provenance
+come from the configured AI runtime, so this optional step is an integration operation rather
+than a fixed database fixture. The output remains experimental, uncalibrated, trained on
+synthetic data, and unsuitable for diagnosis or treatment.
+
+Reset deletes only users whose stable HS-021 UUID and reserved email both match. Cascades remove
+only their owned profiles, measurements, sessions, assessments, conversations, and messages:
+
+```bash
+uv run python -m app.scripts.seed_demo --reset
+```
+
+For the complete local stack, start the AI service from `healthsphere-ai` with
+`uv run uvicorn --app-dir src healthsphere_ai.api:app --host 127.0.0.1 --port 8001`. Build the
+Agent's ignored local index, configure its internal token and provider variables, then start it
+from `healthsphere-agent` with
+`uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8010`. Start this backend
+with `uv run uvicorn app.main:create_app --factory --reload --host 127.0.0.1 --port 8000`, then
+run `npm run dev` from `healthsphere-frontend`. AI is required only for assessment creation; the
+Agent is required only for live RAG/Assistant replies. See the
+[manual demo matrix](docs/testing/DEMO_TEST_MATRIX.md) for persona and service selection.
