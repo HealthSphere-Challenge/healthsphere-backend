@@ -413,8 +413,13 @@ def main() -> int:
             result = seed_demo(db, settings.app_environment, password)
         assessment_id = None
         if args.prepare_assessment:
-            with factory.begin() as db:
-                assessment_id = prepare_assessment(db, settings)
+            with factory() as db:
+                try:
+                    assessment_id = prepare_assessment(db, settings)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
         print(f"Created: {result.created}")
         print(f"Updated: {result.updated}")
         print(f"Skipped: {result.skipped}")
