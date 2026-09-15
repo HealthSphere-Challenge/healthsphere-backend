@@ -25,10 +25,12 @@ def test_cors_parses_explicit_origins() -> None:
 def test_production_requires_ai_service_configuration() -> None:
     with pytest.raises(ValidationError):
         Settings(
+            _env_file=None,
             database_url="postgresql+psycopg://user:pass@localhost/db",
             app_environment="production",
         )
     settings = Settings(
+        _env_file=None,
         database_url="postgresql+psycopg://user:pass@localhost/db",
         app_environment="production",
         ai_service_url="http://ai:8001/",
